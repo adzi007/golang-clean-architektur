@@ -6,6 +6,7 @@ import (
 	"cobasatu/entity"
 	"cobasatu/model"
 	"cobasatu/service"
+	"fmt"
 	"image/png"
 	"log"
 	"net/http"
@@ -27,6 +28,9 @@ func RestServer() *gin.Engine {
 	r.GET("/ping", HandlePing)
 	r.GET("/product", HandleGetProduct)
 	r.POST("/product", HandleInputProduct)
+	r.PUT("/product/:id", HandleUpdateProduct)
+	r.DELETE("/product/:id", HandleDeleteProduct)
+	r.DELETE("/product-img/:id", handleDeleteImage)
 
 	return r
 
@@ -114,6 +118,150 @@ func HandleInputProduct(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "create product success",
 		"data":    result,
+	})
+
+}
+
+func HandleUpdateProduct(ctx *gin.Context) {
+
+	var pInput entity.ProductInput
+
+	ctx.ShouldBind(&pInput)
+
+	validate := validator.New()
+	err := validate.StructExcept(pInput, "Galery")
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	if pInput.Galery == nil {
+
+		updateProducData := model.Product{
+			Name:        pInput.Name,
+			Description: pInput.Description,
+			Tags:        pInput.Tags,
+		}
+
+		err := service.ProductService.UpdateProduct(ctx.Param("id"), updateProducData)
+
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message_error1": err.Error()})
+			return
+		}
+
+	} else {
+
+		var savedImgGalery []model.ImageGalery
+
+		for _, galeryItem := range pInput.Galery {
+
+			// Retrieve file information
+			extension := filepath.Ext(galeryItem.Filename)
+
+			// Generate random file name for the new uploaded file
+			newFileName := uuid.New().String() + extension
+
+			err := ctx.SaveUploadedFile(galeryItem, "assets/"+newFileName)
+			if err != nil {
+				ctx.String(http.StatusInternalServerError, "unknown error")
+				return
+			}
+
+			createThumbnail(newFileName)
+
+			imgGalery := model.ImageGalery{
+
+				Fullsize:  newFileName,
+				Thumbnail: "thumb-" + newFileName,
+			}
+
+			savedImgGalery = append(savedImgGalery, imgGalery)
+
+		}
+
+		updateProducData := model.Product{
+			Name:        pInput.Name,
+			Description: pInput.Description,
+			Tags:        pInput.Tags,
+			Galery:      savedImgGalery,
+		}
+
+		err := service.ProductService.UpdateProduct(ctx.Param("id"), updateProducData)
+
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message_error": err.Error()})
+			return
+		}
+
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+
+		"message": "proses update",
+		"data":    pInput,
+	})
+
+}
+
+func handleDeleteImage(ctx *gin.Context) {
+	var img model.ImgFile
+
+	if err := ctx.ShouldBindJSON(&img); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	err := service.ProductService.DeleteImgGalery(ctx.Param("id"), img)
+
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message_error": err.Error()})
+		return
+	}
+
+	fullsizeimage := "assets/" + img.Filename
+	thumbsizeimage := "assets/thumb-" + img.Filename
+
+	err1 := os.Remove(fullsizeimage)
+
+	if err1 != nil {
+
+		fmt.Println(err1)
+		return
+	}
+
+	err2 := os.Remove(thumbsizeimage)
+
+	if err2 != nil {
+
+		fmt.Println(err2)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+
+		"message": "berhasil delete image",
+		"data":    img,
+	})
+}
+
+func HandleDeleteProduct(ctx *gin.Context) {
+
+	err := service.ProductService.DeleteProduct(ctx.Param("id"))
+
+	if err != nil {
+
+		ctx.JSON(http.StatusBadRequest, gin.H{
+
+			"message": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+
+		"message": "success delete product",
 	})
 
 }
