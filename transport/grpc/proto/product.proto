@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package main;
+
+option go_package = "./proto";
+
+service ProductApi {
+    rpc GetProducts(PaginationRequest) returns (ProductResponse){}
+    rpc GetProductById(ProductIdRequest) returns (Product){}
+}
+
+message ImageGalery {
+    string Fullsize = 1;
+    string Thumbnail = 2;
+}
+
+message Product {
+    string Id = 1;          
+	string Name = 2;
+	string Description = 3;
+	repeated ImageGalery Galery = 4;
+	string Tags = 5;
+	string Created_at = 6;  
+	string Updated_at = 7;
+}
+
+message ProductResponse {
+    repeated Product dataProduct = 1;
+}
+
+message PaginationRequest {
+    string page = 1;
+    string search = 2;
+}
+
+message ProductIdRequest {
+    string productId = 1;
+}
